@@ -71,6 +71,9 @@ function FaqSection() {
 
     getFaqs();
     return () => controller.abort();
+
+
+    
   }, []);
 
   return (
