@@ -1,39 +1,77 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Plus } from "lucide-react";
 
-const faqs = [
-  {
-    question: "What services do you provide?",
-    answer:
-      "We provide complete vacation rental management, including property onboarding, guest communication, booking optimization, dynamic pricing, maintenance coordination, and detailed performance reporting.",
-  },
-  {
-    question: "Do you work with both individual owners and property portfolios?",
-    answer:
-      "Yes. We support individual vacation-home owners as well as professional operators with growing property portfolios, tailoring our service to each owner's goals.",
-  },
-  {
-    question: "Can I request a free property performance estimate?",
-    answer:
-      "Absolutely. Our team can review your property, local demand, seasonal trends, and comparable listings to prepare a complimentary revenue opportunity estimate.",
-  },
-  {
-    question: "What does your onboarding process look like?",
-    answer:
-      "We begin with a property review and custom strategy, then configure listings, pricing, guest communication, operational workflows, and reporting before your launch.",
-  },
-  {
-    question: "How do you handle maintenance and guest support?",
-    answer:
-      "Our team coordinates trusted local vendors, tracks maintenance requests in real time, and provides responsive guest communication throughout every stay.",
-  },
-];
+type Faq = {
+  _id: string;
+  question: string;
+  answer: string;
+};
+
+type FaqResponse = {
+  meta?: {
+    totalPages?: number;
+  };
+  data?: {
+    faqs?: Faq[];
+  };
+};
 
 function FaqSection() {
   const [openItem, setOpenItem] = useState<number | null>(0);
+  const [faqs, setFaqs] = useState<Faq[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const getFaqs = async () => {
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL?.replace(/\/$/, "");
+      if (!baseUrl) {
+        setError("Backend API URL is not configured.");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const getPage = async (page: number) => {
+          const response = await fetch(`${baseUrl}/faq?page=${page}&limit=100`, {
+            signal: controller.signal,
+          });
+
+          if (!response.ok) throw new Error("Failed to load FAQs.");
+          return (await response.json()) as FaqResponse;
+        };
+
+        const firstPage = await getPage(1);
+        const totalPages = firstPage.meta?.totalPages ?? 1;
+        const remainingPages = await Promise.all(
+          Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => getPage(index + 2)),
+        );
+        const allFaqs = [firstPage, ...remainingPages].flatMap(
+          (page) => page.data?.faqs ?? [],
+        );
+
+        if (!controller.signal.aborted) {
+          setFaqs(allFaqs);
+          setError(null);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (!controller.signal.aborted) {
+          setError(error instanceof Error ? error.message : "Failed to load FAQs.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    };
+
+    getFaqs();
+    return () => controller.abort();
+  }, []);
 
   return (
     <section id="faq" className="w-full bg-[#fafbff] py-16 sm:py-20 lg:py-24">
@@ -58,14 +96,38 @@ function FaqSection() {
           </h2>
 
           <div className="mt-7 border-t border-slate-300/80">
-            {faqs.map((faq, index) => {
+            {isLoading &&
+              Array.from({ length: 5 }, (_, index) => (
+                <div
+                  key={index}
+                  aria-hidden="true"
+                  className="flex animate-pulse items-center justify-between border-b border-slate-300/80 py-4"
+                >
+                  <div className="h-4 w-3/4 rounded bg-slate-200" />
+                  <div className="size-7 rounded-full bg-slate-200" />
+                </div>
+              ))}
+
+            {!isLoading && error && (
+              <p role="alert" className="border-b border-slate-300/80 py-8 text-center text-sm text-red-600">
+                {error}
+              </p>
+            )}
+
+            {!isLoading && !error && faqs.length === 0 && (
+              <p className="border-b border-slate-300/80 py-8 text-center text-sm text-slate-500">
+                FAQ data not found.
+              </p>
+            )}
+
+            {!isLoading && !error && faqs.map((faq, index) => {
               const isOpen = openItem === index;
               const contentId = `faq-content-${index}`;
               const triggerId = `faq-trigger-${index}`;
 
               return (
                 <div
-                  key={faq.question}
+                  key={faq._id}
                   className={`border-b border-slate-300/80 transition-colors duration-300 ${
                     isOpen ? "bg-white/35" : "hover:bg-white/25"
                   }`}

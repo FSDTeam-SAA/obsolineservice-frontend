@@ -1,18 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ArrowUpRight, CalendarCheck2, Menu, X } from "lucide-react";
 
 const navigation = [
-  { label: "Home", href: "/" },
-  { label: "About", href: "/#about" },
-  { label: "Services", href: "/#services" },
-  { label: "FAQ", href: "/#faq" },
+  { label: "Home", href: "/", sectionId: "home" },
+  { label: "About", href: "/#about", sectionId: "about" },
+  { label: "Services", href: "/#services", sectionId: "services" },
+  { label: "FAQ", href: "/#faq", sectionId: "faq" },
 ];
 
 function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("home");
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (pathname !== "/") {
+      setActiveSection("");
+      return;
+    }
+
+    const updateActiveSection = () => {
+      const sectionOffset = 120;
+      let currentSection = "home";
+
+      navigation.slice(1).forEach((item) => {
+        const section = document.getElementById(item.sectionId);
+        if (section && section.getBoundingClientRect().top <= sectionOffset) {
+          currentSection = item.sectionId;
+        }
+      });
+
+      setActiveSection(currentSection);
+    };
+
+    updateActiveSection();
+    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    window.addEventListener("hashchange", updateActiveSection);
+
+    return () => {
+      window.removeEventListener("scroll", updateActiveSection);
+      window.removeEventListener("hashchange", updateActiveSection);
+    };
+  }, [pathname]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/95 shadow-[0_1px_12px_rgba(15,23,42,0.04)] backdrop-blur-md">
@@ -39,18 +72,20 @@ function Navbar() {
         </Link>
 
         <div className="hidden items-center gap-1 lg:flex">
-          {navigation.map((item, index) => (
+          {navigation.map((item) => (
             <Link
               key={item.label}
               href={item.href}
+              aria-current={activeSection === item.sectionId ? "page" : undefined}
+              onClick={() => setActiveSection(item.sectionId)}
               className={`relative rounded-lg px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
-                index === 0
+                activeSection === item.sectionId
                   ? "text-[#29236c]"
                   : "text-slate-600 hover:bg-indigo-50/60 hover:text-[#29236c]"
               }`}
             >
               {item.label}
-              {index === 0 && (
+              {activeSection === item.sectionId && (
                 <span className="absolute inset-x-4 -bottom-[7px] h-0.5 rounded-full bg-[#29236c]" />
               )}
             </Link>
@@ -88,13 +123,17 @@ function Navbar() {
         }`}
       >
         <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-4 sm:px-6">
-          {navigation.map((item, index) => (
+          {navigation.map((item) => (
             <Link
               key={item.label}
               href={item.href}
-              onClick={() => setIsMenuOpen(false)}
+              aria-current={activeSection === item.sectionId ? "page" : undefined}
+              onClick={() => {
+                setActiveSection(item.sectionId);
+                setIsMenuOpen(false);
+              }}
               className={`rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-                index === 0
+                activeSection === item.sectionId
                   ? "bg-indigo-50 text-[#29236c]"
                   : "text-slate-600 hover:bg-slate-50 hover:text-[#29236c]"
               }`}

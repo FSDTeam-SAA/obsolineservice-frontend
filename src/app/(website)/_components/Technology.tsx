@@ -4,75 +4,46 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 
-const images = [
-  {
-    src: "/images/hospitality/property-aerial.png",
-    alt: "Aerial view of a premium vacation property community",
-  },
-  {
-    src: "/images/hospitality/property-villa.png",
-    alt: "Luxury vacation villa and swimming pool",
-  },
-  {
-    src: "/images/hospitality/property-coastal.png",
-    alt: "Boutique coastal vacation homes overlooking the sea",
-  },
-];
+type Feature = {
+  _id: string;
+  featureName: string;
+  title: string;
+  bodyText: string;
+  features: string[];
+  image?: string;
+};
 
-const sections = [
-  {
-    eyebrow: "Guest Experience",
-    title: "Exceptional stays start with exceptional communication.",
-    description:
-      "Our AI-powered messaging platform handles every guest touchpoint — pre-arrival, check-in, and post-stay review requests.",
-    features: [
-      "Automated pre-arrival messages",
-      "Smart FAQ responses",
-      "Check-in coordination",
-      "Review request sequences",
-    ],
-  },
-  {
-    eyebrow: "Revenue Intelligence",
-    title: "Dynamic pricing that never leaves money on the table.",
-    description:
-      "Our pricing engine monitors 40+ market signals: demand trends, events, competitor rates, and seasonality to set the optimal rate every night.",
-    features: [
-      "Real-time market monitoring",
-      "Automated rate adjustments",
-      "RevPAR tracking",
-      "30-day forward forecasting",
-    ],
-  },
-  {
-    eyebrow: "Operations",
-    title: "Seamless operations, zero surprises.",
-    description:
-      "From housekeeping schedules to maintenance ticketing and vendor management — every task is tracked and reported in real time.",
-    features: [
-      "Automated cleaning scheduling",
-      "Maintenance ticketing",
-      "Vendor portal",
-      "Real-time status updates",
-    ],
-  },
-];
+type FeatureResponse = {
+  meta?: {
+    totalPages?: number;
+  };
+  data?: {
+    features?: Feature[];
+  };
+};
+
+type SliderImage = {
+  src: string;
+  alt: string;
+};
 
 type ImageSliderProps = {
+  images: SliderImage[];
   startIndex: number;
   interval: number;
   priority?: boolean;
 };
 
-function ImageSlider({ startIndex, interval, priority = false }: ImageSliderProps) {
-  const [activeSlide, setActiveSlide] = useState(startIndex);
+function ImageSlider({ images, startIndex, interval, priority = false }: ImageSliderProps) {
+  const [activeSlide, setActiveSlide] = useState(startIndex % images.length);
 
   useEffect(() => {
+    setActiveSlide((current) => current % images.length);
     const timer = window.setInterval(() => {
       setActiveSlide((current) => (current + 1) % images.length);
     }, interval);
     return () => window.clearInterval(timer);
-  }, [interval]);
+  }, [images.length, interval]);
 
   const showPrevious = () => {
     setActiveSlide((current) => (current - 1 + images.length) % images.length);
@@ -143,6 +114,71 @@ function ImageSlider({ startIndex, interval, priority = false }: ImageSliderProp
 }
 
 function Technology() {
+  const [features, setFeatures] = useState<Feature[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const getFeatures = async () => {
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL?.replace(/\/$/, "");
+      if (!baseUrl) {
+        setError("Backend API URL is not configured.");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const getPage = async (page: number) => {
+          const response = await fetch(`${baseUrl}/feature?page=${page}&limit=100`, {
+            signal: controller.signal,
+          });
+
+          if (!response.ok) throw new Error("Failed to load technology data.");
+          return (await response.json()) as FeatureResponse;
+        };
+
+        const firstPage = await getPage(1);
+        const totalPages = firstPage.meta?.totalPages ?? 1;
+        const remainingPages = await Promise.all(
+          Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => getPage(index + 2)),
+        );
+        const allFeatures = [firstPage, ...remainingPages].flatMap(
+          (page) => page.data?.features ?? [],
+        );
+
+        if (!controller.signal.aborted) {
+          setFeatures(allFeatures);
+          setError(null);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (!controller.signal.aborted) {
+          setError(error instanceof Error ? error.message : "Failed to load technology data.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    };
+
+    getFeatures();
+    return () => controller.abort();
+  }, []);
+
+  const sections = features.map((feature) => ({
+        id: feature._id,
+        eyebrow: feature.featureName,
+        title: feature.title,
+        description: feature.bodyText,
+        features: feature.features,
+        image: feature.image,
+      }));
+
+  const images = features
+    .filter((feature): feature is Feature & { image: string } => Boolean(feature.image))
+    .map((feature) => ({ src: feature.image, alt: feature.title }));
+
   return (
     <section id="services" className="relative overflow-hidden bg-[#f9faff] py-16 sm:py-20 lg:py-24">
       <div className="pointer-events-none absolute -left-40 top-1/3 size-80 rounded-full bg-indigo-100/40 blur-3xl" />
@@ -154,17 +190,62 @@ function Technology() {
         </h2>
 
         <div className="mt-14 space-y-16 sm:mt-16 lg:space-y-20">
-          {sections.map((section, index) => (
+          {isLoading &&
+            Array.from({ length: 3 }, (_, index) => (
+              <article
+                key={index}
+                aria-hidden="true"
+                className="grid animate-pulse items-center gap-9 lg:grid-cols-2 lg:gap-20"
+              >
+                <div
+                  className={`aspect-[16/10] w-full rounded-xl bg-slate-200 ${
+                    index % 2 === 1 ? "lg:order-2" : ""
+                  }`}
+                />
+                <div className={`max-w-xl ${index % 2 === 1 ? "lg:order-1" : ""}`}>
+                  <div className="h-3 w-28 rounded bg-slate-200" />
+                  <div className="mt-4 h-7 w-4/5 rounded bg-slate-200" />
+                  <div className="mt-3 h-7 w-3/5 rounded bg-slate-200" />
+                  <div className="mt-5 h-3 w-full rounded bg-slate-200" />
+                  <div className="mt-2 h-3 w-5/6 rounded bg-slate-200" />
+                  <div className="mt-6 space-y-3">
+                    {Array.from({ length: 4 }, (_, item) => (
+                      <div key={item} className="flex items-center gap-2.5">
+                        <div className="size-4 rounded-full bg-slate-200" />
+                        <div className="h-3 w-2/5 rounded bg-slate-200" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </article>
+            ))}
+
+          {!isLoading && error && (
+            <p role="alert" className="py-12 text-center text-sm text-red-600">{error}</p>
+          )}
+
+          {!isLoading && !error && sections.length === 0 && (
+            <p className="py-12 text-center text-sm text-slate-500">Technology data not found.</p>
+          )}
+
+          {!isLoading && !error && sections.map((section, index) => (
             <article
-              key={section.eyebrow}
+              key={section.id}
               className="grid items-center gap-9 lg:grid-cols-2 lg:gap-20"
             >
               <div className={index % 2 === 1 ? "lg:order-2" : undefined}>
-                <ImageSlider
-                  startIndex={index}
-                  interval={4200 + index * 600}
-                  priority={index === 0}
-                />
+                {images.length ? (
+                  <ImageSlider
+                    images={images}
+                    startIndex={index % images.length}
+                    interval={4200 + index * 600}
+                    priority={index === 0}
+                  />
+                ) : (
+                  <div className="grid aspect-[16/10] w-full place-items-center rounded-xl bg-slate-200 text-sm text-slate-500 shadow-[0_18px_45px_rgba(45,70,120,0.14)]">
+                    Image not found.
+                  </div>
+                )}
               </div>
 
               <div className={`max-w-xl ${index % 2 === 1 ? "lg:order-1" : ""}`}>
